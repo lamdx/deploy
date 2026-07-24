@@ -1,0 +1,170 @@
+#!/usr/bin/env node
+/**
+ * dc — 前端构建部署脚手架 CLI 入口
+ *
+ * 核心流程：dc init 配置项目 → dc start 串行构建 + 并行部署
+ * 配置文件统一存放在用户家目录 .deploy-cli.json，不污染业务代码
+ *
+ * 命令注册全部由 commander 管理，各命令的 action 直接调用 lib/ 模块
+ */
+const { program } = require('commander');
+const chalk = require('chalk');
+const { runInit } = require('../lib/init');
+const { runBuild, checkDistExists } = require('../lib/build');
+const { deployParallel } = require('../lib/deploy');
+const {
+  getProjectConfig,
+  removeProjectConfig,
+  getAllCachedProjects,
+  getServerList
+} = require('../lib/cache');
+
+program
+  .name('dc')
+  .description(
+    `
+前端构建部署脚手架
+配置文件：用户家目录/.deploy-cli.json
+规则：
+1. dc init 交互式初始化项目配置，以当前目录路径作为key缓存
+2. dc start / dc s / dc -s 串行执行多条构建命令，单条构建成功后并行部署所有选中服务器
+3. 任意构建失败，流程立即终止
+4. 重复 dc init 覆盖当前项目已有配置
+`
+  )
+  .version('1.3.0', '-v, --version');
+
+// init
+program
+  .command('init')
+  .description('交互式初始化当前项目部署配置（覆盖已有缓存）')
+  .action(runInit);
+
+// info
+program
+  .command('info')
+  .description('查看当前项目已缓存的部署配置')
+  .action(() => {
+    const cfg = getProjectConfig();
+    if (!cfg) {
+      console.log(chalk.yellow('⚠️ 当前项目暂无配置，请先执行 dc init'));
+      return;
+    }
+    const SERVER_LIST = getServerList();
+    const targetServers = SERVER_LIST.filter(item =>
+      cfg.selectedServerIds.includes(item.id)
+    );
+    console.log(chalk.cyan('================ 当前项目配置 ================'));
+    console.log('构建命令序列：');
+    cfg.buildCommands.forEach((cmd, idx) =>
+      console.log(`  ${idx + 1}. ${cmd}`)
+    );
+    console.log('产物目录：', cfg.distPath);
+    console.log('目标服务器：');
+    targetServers.forEach(s =>
+      console.log(`  - ${s.name} ${s.host} 远端目录:${s.baseRemoteDir}`)
+    );
+  });
+
+// clean
+program
+  .command('clean')
+  .description('删除当前项目缓存的部署配置')
+  .action(() => {
+    const ok = removeProjectConfig();
+    if (ok) {
+      console.log(chalk.green('✅ 当前项目配置已清除'));
+    } else {
+      console.log(chalk.yellow('⚠️ 当前项目不存在缓存配置'));
+    }
+  });
+
+// list
+program
+  .command('list')
+  .description('列出本机所有已缓存配置的项目绝对路径')
+  .action(() => {
+    const allCache = getAllCachedProjects();
+    const keys = Object.keys(allCache);
+    if (keys.length === 0) {
+      console.log(chalk.yellow('暂无任何缓存项目'));
+      return;
+    }
+    console.log(
+      chalk.cyan(
+        `================ 全部缓存项目（共${keys.length}个）================`
+      )
+    );
+    keys.forEach((pathStr, index) => {
+      console.log(`${index + 1}. ${pathStr}`);
+    });
+  });
+
+// start 主命令 + 别名 s
+program
+  .command('start')
+  .alias('s')
+  .description('启动完整流水线：串行构建 → 并行部署服务器')
+  .action(async () => {
+    const projectCfg = getProjectConfig();
+    if (!projectCfg) {
+      console.log(chalk.yellow('⚠️ 当前项目无配置，请先执行 dc init'));
+      process.exit(1);
+    }
+
+    const { buildCommands, distPath, selectedServerIds } = projectCfg;
+    const SERVER_LIST = getServerList();
+    const targetServers = SERVER_LIST.filter(item =>
+      selectedServerIds.includes(item.id)
+    );
+
+    console.log(
+      chalk.cyan('==================== 任务开始 ====================')
+    );
+    console.log('构建命令序列：', buildCommands);
+    console.log('产物目录：', distPath);
+    console.log(
+      '目标服务器：',
+      targetServers.map(s => `${s.name} -> ${s.baseRemoteDir}`)
+    );
+
+    // 逐条串行构建，单条成功后立即部署到全部服务器
+    // 设计意图：支持增量构建场景（如先构建基础包 → 部署 → 再构建业务包 → 部署）
+    for (const buildCmd of buildCommands) {
+      const buildOk = await runBuild(buildCmd);
+      if (!buildOk) {
+        console.log(chalk.red(`\n❌【${buildCmd}】构建失败，终止全部任务`));
+        process.exit(1);
+      }
+      // 每次部署前校验产物目录，防止构建静默失败（产物未生成但退出码为 0）
+      if (!checkDistExists(distPath)) {
+        process.exit(1);
+      }
+      const deployResult = await deployParallel(targetServers, distPath);
+      if (!deployResult.allOk) {
+        console.log(chalk.red('\n❌ 部分服务器部署失败，终止后续任务'));
+        process.exit(1);
+      }
+    }
+
+    console.log(chalk.green.bold('\n🎉 所有构建与部署任务全部完成！'));
+  });
+
+// commander 不支持将 -s 注册为 option 别名（会与 start 子命令冲突），
+// 因此在 parse 之前手动将 -s 改写为 start，实现 dc -s ≡ dc start
+const argv = process.argv;
+if (argv.includes('-s') && !argv.includes('start') && !argv.includes('s')) {
+  const idx = argv.indexOf('-s');
+  argv.splice(idx, 1);
+  argv.push('start');
+}
+
+// 捕获无效命令：commander 默认不报错，仅静默忽略。手动挂载兜底处理
+program.on('command:*', function (unknownCmd) {
+  console.error(chalk.red(`❌ 无效命令：${unknownCmd.join(' ')}`));
+  console.log('\n');
+  program.outputHelp();
+  process.exit(1);
+});
+
+program.parse();

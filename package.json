@@ -1,0 +1,14 @@
+{
+  "name": "deploy-cli",
+  "version": "1.0.0",
+  "bin": {
+    "dc": "./bin/index.js"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "execa": "^8.0.1",
+    "inquirer": "^8.2.6",
+    "node-ssh": "^13.1.0"
+  }
+}
