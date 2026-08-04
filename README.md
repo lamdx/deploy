@@ -153,6 +153,9 @@ dc init 时若 serverList 为空，会提示并尝试自动打开配置文件供
 | dc start          | 启动完整流水线：构建 + 并行部署                                                                                     |
 | dc s              | start 子命令别名，等价 dc start                                                                                     |
 | dc -s             | 参数转发，等价 dc start                                                                                             |
+| dc zip            | 本地压缩目录为 zip（默认压缩缓存产物目录，无缓存回退 ./dist）                                                        |
+| dc unzip          | 本地解压 zip 到目录（默认解压 ./<产物目录名>.zip 到缓存产物目录，无缓存回退 ./dist）                                |
+| dc deploy         | 纯部署：跳过构建，直接上传现有产物到选中服务器                                                                      |
 | dc -v / --version | 输出版本号，commander 原生支持                                                                                      |
 | dc -h / --help    | 输出帮助文档，commander 原生支持                                                                                    |
 
@@ -248,3 +251,31 @@ dc init 检测到 serverList 为空时，会提示用户是否打开配置文件
 2. 增加部署前后自定义钩子脚本；
 3. 增加日志持久化输出；
 4. 支持环境变量注入服务器密码，避免源码明文。
+
+十五、压缩 / 解压与纯部署（dc zip / dc unzip / dc deploy）
+
+dc zip — 本地压缩产物目录
+
+压缩目录为 zip 文件（默认压缩缓存产物目录，无缓存回退 ./dist）
+
+    dc zip                     # 默认压缩缓存产物目录（或 ./dist）→ ./dist.zip
+    dc zip ./public -o app.zip # 指定源目录与输出文件
+
+输出文件已存在时交互确认覆盖；成功输出压缩包大小与耗时。
+
+dc unzip — 本地解压 zip
+
+解压 zip 到目录（默认解压 ./dist.zip 到缓存产物目录，无缓存回退 ./dist）
+
+    dc unzip                    # 默认解压 ./dist.zip → 缓存产物目录（或 ./dist）
+    dc unzip app.zip -d ./tmp   # 指定压缩包与目标目录
+
+压缩包损坏时明确报错；目标目录不存在自动创建。
+
+dc deploy — 纯部署（跳过构建）
+
+复用 dc init 缓存配置，跳过构建命令，直接上传现有产物到选中服务器
+
+    dc deploy
+
+适合"产物已构建好、只想重新上传"的场景；与 dc start 共用部署逻辑。

@@ -34,9 +34,11 @@ program
 2. dc start / dc s / dc -s 串行执行多条构建命令，单条构建成功后并行部署所有选中服务器
 3. 任意构建失败，流程立即终止
 4. 重复 dc init 覆盖当前项目已有配置
+5. dc zip / dc unzip 本地压缩/解压产物目录，默认使用缓存产物目录
+6. dc deploy 纯部署：跳过构建，直接上传现有产物
 `
   )
-  .version('1.3.0', '-v, --version');
+  .version('1.4.0', '-v, --version');
 
 // 解析默认产物目录：优先缓存配置 distPath，无配置回退 ./dist
 function resolveDistPath() {
