@@ -305,3 +305,24 @@ dc deploy — 纯部署（跳过构建）
     dc deploy
 
 适合"产物已构建好、只想重新上传"的场景；与 dc start 共用部署逻辑。
+
+十六、桌面一键脚本（deploy-from-downloads.bat）
+
+项目根目录附带一个桌面双击脚本 `deploy-from-downloads.bat`，用于「下载目录一键解压 + 纯部署」场景：浏览器下载目录拿到产物压缩包后，无需打开终端，双击即完成解压与上传。
+
+使用方式
+
+1. 将 `deploy-from-downloads.bat` 复制到桌面；
+2. 双击运行（脚本自动定位系统默认下载目录 `%USERPROFILE%\Downloads`）；
+3. 依次执行 `dc unzip`（解压 `./dist.zip` 到缓存产物目录）→ `dc deploy`（纯部署）；
+4. 任一步失败立即终止并保持窗口，方便查看错误信息。
+
+运行前提
+
+- `dc` 已全局安装（`npm link`）；
+- 下载目录已用 `dc init` 配置过缓存（distPath 指向产物目录）；
+- 下载目录下存在默认压缩包 `./dist.zip`（如名称不同，需修改 bat 中 `dc unzip` 的参数）。
+
+编码注意
+
+该 bat 文件内容保持纯 ASCII（英文提示）。cmd.exe 解析 .bat 文件使用系统 ANSI 代码页（中文系统为 GBK），UTF-8 中文会被错读为乱码，其中可能混入 `&` `|` 等特殊字符导致命令行被拆分、乱码片段被当作命令执行（`chcp 65001` 与 UTF-8 BOM 均无法可靠解决）。dc 命令自身的输出仍为中文，不受影响。
