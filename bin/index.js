@@ -209,6 +209,45 @@ program
     if (!ok) process.exit(1);
   });
 
+// deploy — 纯部署：跳过构建，直接上传现有产物
+program
+  .command('deploy')
+  .description('纯部署：跳过构建，直接上传缓存产物目录到选中服务器')
+  .action(async () => {
+    const projectCfg = getProjectConfig();
+    if (!projectCfg) {
+      console.log(chalk.yellow('⚠️ 当前项目无配置，请先执行 dc init'));
+      process.exit(1);
+    }
+
+    const { distPath, selectedServerIds } = projectCfg;
+    const SERVER_LIST = getServerList();
+    const targetServers = SERVER_LIST.filter(item =>
+      selectedServerIds.includes(item.id)
+    );
+
+    console.log(
+      chalk.cyan('==================== 纯部署开始 ====================')
+    );
+    console.log('产物目录：', distPath);
+    console.log(
+      '目标服务器：',
+      targetServers.map(s => `${s.name} -> ${s.baseRemoteDir}`)
+    );
+
+    // 与 dc start 相同的部署前产物校验，防止产物缺失时上传空目录
+    if (!checkDistExists(distPath)) {
+      process.exit(1);
+    }
+    const deployResult = await deployParallel(targetServers, distPath);
+    if (!deployResult.allOk) {
+      console.log(chalk.red('\n❌ 部分服务器部署失败，纯部署终止'));
+      process.exit(1);
+    }
+
+    console.log(chalk.green.bold('\n🎉 纯部署完成！'));
+  });
+
 // commander 不支持将 -s 注册为 option 别名（会与 start 子命令冲突），
 // 因此在 parse 之前手动将 -s 改写为 start，实现 dc -s ≡ dc start
 const argv = process.argv;
