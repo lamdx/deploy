@@ -9,9 +9,13 @@
  */
 const { program } = require('commander');
 const chalk = require('chalk');
+const fs = require('fs');
+const path = require('path');
+const inquirer = require('inquirer');
 const { runInit } = require('../lib/init');
 const { runBuild, checkDistExists } = require('../lib/build');
 const { deployParallel } = require('../lib/deploy');
+const { compressDir, extractZip } = require('../lib/zip');
 const {
   getProjectConfig,
   removeProjectConfig,
@@ -33,6 +37,12 @@ program
 `
   )
   .version('1.3.0', '-v, --version');
+
+// 解析默认产物目录：优先缓存配置 distPath，无配置回退 ./dist
+function resolveDistPath() {
+  const cfg = getProjectConfig();
+  return (cfg && cfg.distPath) || './dist';
+}
 
 // init
 program
@@ -148,6 +158,55 @@ program
     }
 
     console.log(chalk.green.bold('\n🎉 所有构建与部署任务全部完成！'));
+  });
+
+// zip — 本地压缩目录
+program
+  .command('zip')
+  .description('压缩目录为 zip（默认压缩缓存产物目录，无缓存回退 ./dist）')
+  .argument('[srcDir]', '源目录（默认：缓存产物目录或 ./dist）')
+  .option('-o, --output <file>', '输出文件（默认：./<目录名>.zip）')
+  .action(async (srcDir, options) => {
+    const target = srcDir || resolveDistPath();
+    const absTarget = path.resolve(process.cwd(), target);
+    if (!fs.existsSync(absTarget) || !fs.statSync(absTarget).isDirectory()) {
+      console.log(chalk.red(`❌ 源目录不存在或不是目录：${absTarget}`));
+      console.log(chalk.yellow('💡 可指定源目录：dc zip <目录>，或先执行 dc init 配置产物目录'));
+      process.exit(1);
+    }
+    const output = options.output || path.join(process.cwd(), path.basename(absTarget) + '.zip');
+    // 输出已存在 → 交互确认覆盖，避免误覆盖历史压缩包
+    if (fs.existsSync(output)) {
+      const { overwrite } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'overwrite',
+          message: `输出文件已存在：${output}，是否覆盖？`,
+          default: false
+        }
+      ]);
+      if (!overwrite) {
+        console.log(chalk.yellow('已取消压缩'));
+        process.exit(0);
+      }
+    }
+    const ok = await compressDir(absTarget, output);
+    if (!ok) process.exit(1);
+  });
+
+// unzip — 本地解压 zip
+program
+  .command('unzip')
+  .description('解压 zip 到目录（默认解压 ./<产物目录名>.zip 到缓存产物目录，无缓存回退 ./dist）')
+  .argument('[archive]', '压缩包（默认：./<产物目录名>.zip）')
+  .option('-d, --dest <dir>', '目标目录（默认：缓存产物目录或 ./dist）')
+  .action(async (archive, options) => {
+    const distPath = resolveDistPath();
+    const absDist = path.resolve(process.cwd(), distPath);
+    const file = archive || path.join(process.cwd(), path.basename(absDist) + '.zip');
+    const dest = options.dest || distPath;
+    const ok = await extractZip(file, dest);
+    if (!ok) process.exit(1);
   });
 
 // commander 不支持将 -s 注册为 option 别名（会与 start 子命令冲突），
