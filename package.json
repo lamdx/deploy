@@ -5,10 +5,12 @@
     "dc": "./bin/index.js"
   },
   "dependencies": {
+    "archiver": "^7.0.1",
     "chalk": "^4.1.2",
     "commander": "^11.1.0",
     "execa": "^8.0.1",
     "inquirer": "^8.2.6",
-    "node-ssh": "^13.1.0"
+    "node-ssh": "^13.1.0",
+    "unzipper": "^0.12.5"
   }
 }
