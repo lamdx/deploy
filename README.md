@@ -47,6 +47,29 @@ dc info
 
 dc clean  →  删除当前项目缓存
 dc list   →  列出所有缓存项目路径
+
+dc zip [srcDir] [-o 输出]
+├── 源目录 = 参数 || 缓存 distPath || ./dist
+│   └── 不存在 → ❌ 退出
+├── 输出文件 = 参数 || ./<目录名>.zip
+│   └── 已存在 → 交互确认覆盖（拒绝 → 退出）
+└── compressDir()  ← archiver 流式压缩
+    └── 成功 → ✅ 输出大小 + 耗时
+
+dc unzip [archive] [-d 目标]
+├── 压缩包 = 参数 || ./<产物目录名>.zip
+│   └── 不存在 / 非 .zip → ❌ 退出
+├── 目标目录 = 参数 || 缓存 distPath || ./dist（不存在自动创建）
+└── extractZip()  ← unzipper 流式解压
+    └── 损坏 → ❌ 退出；成功 → ✅ 输出文件数 + 耗时
+
+dc deploy
+├── 读取当前项目缓存
+│   └── 无 → ⚠️ 提示 dc init
+├── checkDistExists()
+│   └── 不存在 → ❌ 退出
+└── deployParallel(servers, dist)  ← 与 dc start 相同，跳过构建
+    └── 打印汇总（成功 N 台 / 失败 M 台）
 ```
 
 三、目录结构
@@ -59,7 +82,8 @@ deploy-cli/
 │   ├── cache.js           # 本地持久化缓存管理（JSON文件）
 │   ├── init.js            # dc init 交互式初始化逻辑（含配置文件自动打开）
 │   ├── build.js           # 执行构建命令、dist目录校验
-│   └── deploy.js          # SFTP并行部署、ssh超时控制
+│   ├── deploy.js          # SFTP并行部署、ssh超时控制
+│   └── zip.js             # 本地压缩/解压工具（archiver + unzipper）
 ├── package.json
 ```
 
@@ -70,16 +94,18 @@ deploy-cli/
 ```json
 {
   "name": "deploy-cli",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "bin": {
     "dc": "./bin/index.js"
   },
   "dependencies": {
+    "archiver": "^7.0.0",
     "chalk": "^4.1.2",
     "commander": "^11.1.0",
     "execa": "^8.0.1",
     "inquirer": "^8.2.6",
-    "node-ssh": "^13.1.0"
+    "node-ssh": "^13.1.0",
+    "unzipper": "^0.12.5"
   }
 }
 ```
