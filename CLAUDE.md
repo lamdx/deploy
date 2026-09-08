@@ -24,7 +24,7 @@ bin/index.js   CLI 入口：commander 注册命令，action 直接调 lib/*.js�
 lib/
   cache.js     持久化缓存：~/.deploy-cli.json = { serverList, projectConfigs }
   init.js      dc init 交互逻辑（inquirer 多选脚本/服务器）
-  build.js     runBuild（execaCommand shell 模式）+ checkDistExists
+  build.js     runBuild（系统 shell + 项目本地 bin）+ checkDistExists
   deploy.js    deployParallel（node-ssh SFTP putDirectory）
   zip.js       compressDir / extractZip（archiver + unzipper）
 ```
@@ -50,7 +50,7 @@ lib/
 - **注释与输出**：中文注释，解释"为什么"而非"是什么"；用户可见输出用 chalk 颜色 + emoji（✅❌⚠️💡🎉）
 - **CommonJS**（require），不用 ESM——archiver 必须保持 **v7**（v8 是纯 ESM 包，与项目不兼容，曾踩坑降级）
 - **`dc -s` 别名**：commander 不支持把 `-s` 注册为 option 别名，bin/index.js 底部在 `program.parse()` 前手动改写 argv 实现，改动命令注册时不要破坏这段逻辑
-- 构建命令用 `execaCommand`（shell 模式），支持 `&&`、引号等复杂语法
+- 构建命令用 `execa` 显式调用系统 shell，优先解析项目本地 `node_modules/.bin`，支持 `&&`、引号等复杂语法
 - 部署用 `node-ssh` 的 `putDirectory`（SFTP 目录上传，8 并发，连接超时 15s / 传输超时 60s），`Promise.allSettled` 保证单台服务器失败不影响其他
 - 提交规范：提交信息不带 AI 共创标记（无 Co-Authored-By）；除非计划明确授权，不自动提交
 

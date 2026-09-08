@@ -33,7 +33,7 @@ dc start / dc s / dc -s
 │   └── 无 → ⚠️ 提示 dc init
 ├── 匹配服务器列表 → 过滤选中服务器
 └── for each 构建命令（串行）
-    ├── execaCommand(cmd)  ← shell 模式解析
+    ├── execa(shell, args)  ← shell 解析 + 项目本地 bin
     │   └── 失败 → ❌ 终止全流程（含 exitCode / stderr）
     ├── checkDistExists()
     │   └── 不存在 → ❌ 终止
@@ -194,7 +194,7 @@ dc init 时若 serverList 为空，会提示并尝试自动打开配置文件供
 1. 读取当前目录缓存配置，无配置直接提示执行 dc init 并退出；
 2. 循环遍历 buildCommands（勾选顺序 = 执行顺序，串行执行）
 
-- 执行构建命令（execaCommand shell 模式，支持 && / || / 引号等复杂语法）
+- 执行构建命令（系统 shell 模式，支持 && / || / 引号等复杂语法）
 - 构建失败 → 输出 exitCode + stderr → 立即终止全部任务
 - 构建成功 → 校验本地 dist 目录是否存在（防止构建静默失败）；不存在直接退出
 - dist 校验通过 → 并行部署所有选中服务器（Promise.allSettled，互不影响）
@@ -204,9 +204,10 @@ dc init 时若 serverList 为空，会提示并尝试自动打开配置文件供
 
 九、构建执行规则（lib/build.js）
 
-1. 使用 execaCommand 执行，内部交给系统 shell 解析完整命令；
-2. stdio 继承终端，构建日志实时输出；
-3. 命令退出码非 0 → 判定失败，输出 exitCode、stderr、shortMessage 辅助排查。
+1. 使用 execa 显式调用系统 shell 解析完整命令；
+2. 优先解析当前项目及父目录 `node_modules/.bin` 中的本地命令；
+3. stdio 继承终端，构建日志实时输出；
+4. 命令退出码非 0 → 判定失败，输出 exitCode、stderr、shortMessage 辅助排查。
 
 十、部署规则（lib/deploy.js）
 
